@@ -4,37 +4,60 @@
 #include <memory>
 
 namespace model {
-struct Point { int x, y; };
-struct Size { int width, height; };
-struct Rectangle { Point position; Size size; };
-struct Offset { int dx, dy; };
+
+struct Point {
+    int x;
+    int y;
+};
+
+struct Size {
+    int width;
+    int height;
+};
+
+struct Rectangle {
+    Point position;
+    Size size;
+};
+
+struct Offset {
+    int dx;
+    int dy;
+};
 
 class Road {
 public:
     enum Direction { HORIZONTAL, VERTICAL };
-    Road(Direction dir, Point start, int end) : dir_(dir), start_(start), end_{dir == HORIZONTAL ? end : start.x, dir == VERTICAL ? end : start.y} {}
-    bool IsHorizontal() const { return dir_ == HORIZONTAL; }
-    Point GetStart() const { return start_; }
-    Point GetEnd() const { return end_; }
+
+    Road(Direction dir, Point start, int end);
+
+    bool IsHorizontal() const;
+    Point GetStart() const;
+    Point GetEnd() const;
+
 private:
     Direction dir_;
-    Point start_, end_;
+    Point start_;
+    Point end_;
 };
 
 class Building {
 public:
-    explicit Building(Rectangle bounds) : bounds_(bounds) {}
-    const Rectangle& GetBounds() const { return bounds_; }
+    explicit Building(Rectangle bounds);
+    const Rectangle& GetBounds() const;
+
 private:
     Rectangle bounds_;
 };
 
 class Office {
 public:
-    Office(std::string id, Point position, Offset offset) : id_(std::move(id)), position_(position), offset_(offset) {}
-    const std::string& GetId() const { return id_; }
-    Point GetPosition() const { return position_; }
-    Offset GetOffset() const { return offset_; }
+    Office(std::string id, Point position, Offset offset);
+
+    const std::string& GetId() const;
+    Point GetPosition() const;
+    Offset GetOffset() const;
+
 private:
     std::string id_;
     Point position_;
@@ -43,17 +66,22 @@ private:
 
 class Map {
 public:
-    Map(std::string id, std::string name) : id_(std::move(id)), name_(std::move(name)) {}
-    const std::string& GetId() const { return id_; }
-    const std::string& GetName() const { return name_; }
-    void AddRoad(const Road& road) { roads_.push_back(road); }
-    void AddBuilding(const Building& b) { buildings_.push_back(b); }
-    void AddOffice(const Office& o) { offices_.push_back(o); }
-    const std::vector<Road>& GetRoads() const { return roads_; }
-    const std::vector<Building>& GetBuildings() const { return buildings_; }
-    const std::vector<Office>& GetOffices() const { return offices_; }
+    Map(std::string id, std::string name);
+
+    const std::string& GetId() const;
+    const std::string& GetName() const;
+
+    void AddRoad(const Road& road);
+    void AddBuilding(const Building& b);
+    void AddOffice(const Office& o);
+
+    const std::vector<Road>& GetRoads() const;
+    const std::vector<Building>& GetBuildings() const;
+    const std::vector<Office>& GetOffices() const;
+
 private:
-    std::string id_, name_;
+    std::string id_;
+    std::string name_;
     std::vector<Road> roads_;
     std::vector<Building> buildings_;
     std::vector<Office> offices_;
@@ -61,15 +89,12 @@ private:
 
 class Game {
 public:
-    void AddMap(Map map) { maps_.emplace_back(std::make_shared<Map>(std::move(map))); }
-    const std::vector<std::shared_ptr<Map>>& GetMaps() const { return maps_; }
-    const Map* FindMap(const std::string& id) const {
-        for (const auto& map : maps_) {
-            if (map->GetId() == id) return map.get();
-        }
-        return nullptr;
-    }
+    void AddMap(Map map);
+    const std::vector<std::shared_ptr<Map>>& GetMaps() const;
+    const Map* FindMap(const std::string& id) const;
+
 private:
     std::vector<std::shared_ptr<Map>> maps_;
 };
-}
+
+} // namespace model
