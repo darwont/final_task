@@ -8,26 +8,26 @@
 #include <memory>
 
 namespace http_server {
+
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace sys = boost::system;
 
-inline void ReportError(beast::error_code ec, std::string_view what) {
-    std::cerr << what << ": " << ec.message() << std::endl;
-}
+void ReportError(beast::error_code ec, std::string_view what);
 
 class SessionBase {
 public:
     SessionBase(const SessionBase&) = delete;
     SessionBase& operator=(const SessionBase&) = delete;
-    void Run() {
-        net::dispatch(stream_.get_executor(), beast::bind_front_handler(&SessionBase::Read, GetSharedThis()));
-    }
+    
+    void Run();
+
 protected:
     using HttpRequest = http::request<http::string_body>;
-    explicit SessionBase(tcp::socket&& socket) : stream_(std::move(socket)) {}
+    
+    explicit SessionBase(tcp::socket&& socket);
     ~SessionBase() = default;
 
     template <typename Body, typename Fields>
@@ -41,25 +41,11 @@ protected:
     }
 
 private:
-    void Read() {
-        request_ = {};
-        stream_.expires_after(std::chrono::seconds(30));
-        http::async_read(stream_, buffer_, request_, beast::bind_front_handler(&SessionBase::OnRead, GetSharedThis()));
-    }
-    void OnRead(beast::error_code ec, std::size_t) {
-        if (ec == http::error::end_of_stream) return Close();
-        if (ec) return ReportError(ec, "read");
-        HandleRequest(std::move(request_));
-    }
-    void OnWrite(bool close, beast::error_code ec, std::size_t) {
-        if (ec) return ReportError(ec, "write");
-        if (close) return Close();
-        Read();
-    }
-    void Close() {
-        beast::error_code ec;
-        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
-    }
+    void Read();
+    void OnRead(beast::error_code ec, std::size_t bytes_read);
+    void OnWrite(bool close, beast::error_code ec, std::size_t bytes_written);
+    void Close();
+    
     virtual void HandleRequest(HttpRequest&& request) = 0;
     virtual std::shared_ptr<SessionBase> GetSharedThis() = 0;
 
@@ -73,14 +59,21 @@ class Session : public SessionBase, public std::enable_shared_from_this<Session<
 public:
     template <typename Handler>
     Session(tcp::socket&& socket, Handler&& request_handler)
-        : SessionBase(std::move(socket)), request_handler_(std::forward<Handler>(request_handler)) {}
+        : SessionBase(std::move(socket))
+        , request_handler_(std::forward<Handler>(request_handler)) {
+    }
+
 private:
-    std::shared_ptr<SessionBase> GetSharedThis() override { return this->shared_from_this(); }
+    std::shared_ptr<SessionBase> GetSharedThis() override {
+        return this->shared_from_this();
+    }
+
     void HandleRequest(HttpRequest&& request) override {
         request_handler_(std::move(request), [self = this->shared_from_this()](auto&& response) {
             self->Write(std::move(response));
         });
     }
+
     RequestHandler request_handler_;
 };
 
@@ -89,25 +82,40 @@ class Listener : public std::enable_shared_from_this<Listener<RequestHandler>> {
 public:
     template <typename Handler>
     Listener(net::io_context& ioc, const tcp::endpoint& endpoint, Handler&& request_handler)
-        : ioc_(ioc), acceptor_(net::make_strand(ioc)), request_handler_(std::forward<Handler>(request_handler)) {
+        : ioc_(ioc)
+        , acceptor_(net::make_strand(ioc))
+        , request_handler_(std::forward<Handler>(request_handler)) {
+        
         acceptor_.open(endpoint.protocol());
         acceptor_.set_option(net::socket_base::reuse_address(true));
         acceptor_.bind(endpoint);
         acceptor_.listen(net::socket_base::max_listen_connections);
     }
-    void Run() { DoAccept(); }
+
+    void Run() {
+        DoAccept();
+    }
+
 private:
     void DoAccept() {
-        acceptor_.async_accept(net::make_strand(ioc_), beast::bind_front_handler(&Listener::OnAccept, this->shared_from_this()));
+        acceptor_.async_accept(
+            net::make_strand(ioc_),
+            beast::bind_front_handler(&Listener::OnAccept, this->shared_from_this())
+        );
     }
+
     void OnAccept(sys::error_code ec, tcp::socket socket) {
-        if (ec) return ReportError(ec, "accept");
+        if (ec) {
+            return ReportError(ec, "accept");
+        }
         AsyncRunSession(std::move(socket));
         DoAccept();
     }
+
     void AsyncRunSession(tcp::socket&& socket) {
         std::make_shared<Session<RequestHandler>>(std::move(socket), request_handler_)->Run();
     }
+
     net::io_context& ioc_;
     tcp::acceptor acceptor_;
     RequestHandler request_handler_;
@@ -118,4 +126,5 @@ void ServeHttp(net::io_context& ioc, const tcp::endpoint& endpoint, RequestHandl
     using MyListener = Listener<std::decay_t<RequestHandler>>;
     std::make_shared<MyListener>(ioc, endpoint, std::forward<RequestHandler>(handler))->Run();
 }
-}
+
+} // namespace http_server
